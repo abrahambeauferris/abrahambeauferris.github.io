@@ -32,6 +32,8 @@ When I’m not working on cutting-edge rendering systems, I enjoy contributing t
 ### Associate Engineer | Huawei Canada, Vancouver Research Center  
 _August 2022 - Present_
 
+![O3DE Logo](assets/images/o3de.png)
+
 At Huawei, I contribute to the Cloud Rendering team where I work on advancing real-time photorealistic imagery. My role includes:
 - Developing material creation tools within Open 3D Engine.
 - Implementing and optimizing physically-based rendering techniques.
@@ -40,6 +42,8 @@ At Huawei, I contribute to the Cloud Rendering team where I work on advancing re
 
 ### Undergraduate Researcher | VISAGG, University of Calgary  
 _September 2021 - May 2022_
+
+![Surgisim Picture](assets/images/surgisim-platform-1.png)
 
 I collaborated on the **SurgiSim** project, a VR platform designed to teach otolaryngology through immersive simulations. I contributed to graphical enhancements and helped improve performance through rendering techniques like directional ambient occlusion.
 
@@ -50,10 +54,14 @@ I collaborated on the **SurgiSim** project, a VR platform designed to teach otol
 ### Deep Albedo: A Spatially Aware Autoencoder Approach to Interactive Human Skin Rendering  
 _C++, Python, OpenCV, UE5_
 
+![Deep Albedo Project](assets/images/deep-albedo.png)
+
 This research project focused on using **Monte Carlo photon simulations** and **neural autoencoders** to simulate human skin color in real-time. The goal was to create a model that could dynamically change based on biophysical parameters. This project was presented at SIGGRAPH Asia 2023.
 
 ### Enhancing the Graphical Fidelity of the SurgiSim Platform  
 _Unreal Engine 4, C++_
+
+![Honours Project](assets/images/surgisim-platform-2.png)
 
 For my honours research, I enhanced the visual fidelity of the SurgiSim VR platform. I implemented **directional ambient occlusion** and **subsurface scattering** to increase realism. Additionally, I improved the performance using **dynamic resolution scaling**, ensuring the system could run smoothly under demanding conditions.
 
