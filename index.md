@@ -74,7 +74,7 @@ I’m always open to new opportunities and collaborations. Feel free to reach ou
 - **Email**: [abeauferris@gmail.com](mailto:abeauferris@gmail.com)  
 - **Phone**: 403.874.8433  
 - **LinkedIn**: [linkedin.com/in/abrahambeauferris](https://linkedin.com/in/abrahambeauferris)  
-- **GitHub**: [abrahambeauferris.github.io](https://abrahambeauferris.github.io)
+- **GitHub**: [github.com/abrahambeauferris](https://github.com/abrahambeauferris)
 
 ---
 
