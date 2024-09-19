@@ -11,13 +11,16 @@ Explore my work, research, and career journey below.
 
 ---
 
-## Fun Interactive Demo - Simple Ray Tracer
+## Fun Interactive Demo - Stanford Teapot Ray Tracer
 
-This is an example of a ray tracer implemented in JavaScript, rendering directly onto an HTML canvas. The current version displays a ray-traced sphere. Soon, I'll be adding a model of my own face for a unique self-portrait!
+This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm implemented in JavaScript. This demo shows the fundamentals of ray tracing with a triangle mesh object!
 
 <div>
   <canvas id="raytracer" width="400" height="300" style="border:1px solid #000000;"></canvas>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/OBJLoader.js"></script>
 
 <script>
   const canvas = document.getElementById("raytracer");
@@ -25,13 +28,31 @@ This is an example of a ray tracer implemented in JavaScript, rendering directly
   const width = canvas.width;
   const height = canvas.height;
 
+  // Load Teapot model using OBJLoader
+  const loader = new THREE.OBJLoader();
+  let teapotGeometry = null;
+
+  loader.load('assets/teapot.obj', function (object) {
+    object.traverse(function (child) {
+      if (child instanceof THREE.Mesh) {
+        teapotGeometry = child.geometry;
+        rayTrace();
+      }
+    });
+  });
+
   function rayTrace() {
+    if (!teapotGeometry) return;
+
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
 
+    const vertices = teapotGeometry.attributes.position.array;
+    const faces = teapotGeometry.index.array;
+
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const color = computeRayColor(x, y);
+        const color = computeRayColor(x, y, vertices, faces);
         const index = (x + y * width) * 4;
         data[index + 0] = color[0]; // R
         data[index + 1] = color[1]; // G
@@ -42,44 +63,75 @@ This is an example of a ray tracer implemented in JavaScript, rendering directly
     ctx.putImageData(imageData, 0, 0);
   }
 
-  function computeRayColor(x, y) {
-    const sphere = {
-      center: [200, 150, 50],
-      radius: 50,
-    };
+  // Ray-Teapot intersection function
+  function computeRayColor(x, y, vertices, faces) {
     const rayOrigin = [x, y, 0];
     const rayDirection = [0, 0, 1];
 
-    const t = intersectRaySphere(rayOrigin, rayDirection, sphere);
-    if (t > 0.0) {
-      return [255, 0, 0]; // Sphere hit, return red
+    // Loop through each face (triangle) in the teapot geometry
+    let closestHit = null;
+    for (let i = 0; i < faces.length; i += 3) {
+      const v0 = [vertices[faces[i] * 3], vertices[faces[i] * 3 + 1], vertices[faces[i] * 3 + 2]];
+      const v1 = [vertices[faces[i + 1] * 3], vertices[faces[i + 1] * 3 + 1], vertices[faces[i + 1] * 3 + 2]];
+      const v2 = [vertices[faces[i + 2] * 3], vertices[faces[i + 2] * 3 + 1], vertices[faces[i + 2] * 3 + 2]];
+
+      const hit = intersectRayTriangle(rayOrigin, rayDirection, v0, v1, v2);
+      if (hit && (!closestHit || hit.t < closestHit.t)) {
+        closestHit = hit;
+      }
+    }
+
+    if (closestHit) {
+      return [255, 0, 0]; // Hit the teapot, return red
     } else {
       return [135, 206, 235]; // Sky blue background
     }
   }
 
+  // Ray-Triangle Intersection Algorithm (Möller–Trumbore)
+  function intersectRayTriangle(origin, direction, v0, v1, v2) {
+    const epsilon = 0.000001;
+    const edge1 = subtract(v1, v0);
+    const edge2 = subtract(v2, v0);
+    const h = cross(direction, edge2);
+    const a = dot(edge1, h);
+
+    if (a > -epsilon && a < epsilon) return null; // This ray is parallel to the triangle.
+
+    const f = 1.0 / a;
+    const s = subtract(origin, v0);
+    const u = f * dot(s, h);
+
+    if (u < 0.0 || u > 1.0) return null;
+
+    const q = cross(s, edge1);
+    const v = f * dot(direction, q);
+
+    if (v < 0.0 || u + v > 1.0) return null;
+
+    const t = f * dot(edge2, q); // Intersection point is found
+
+    if (t > epsilon) return { t }; // Ray intersection
+
+    return null;
+  }
+
+  // Vector math functions
   function subtract(v1, v2) {
     return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
   }
 
   function dot(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+    return v1[0] * v2[0] + v1[1] * v2[1] + v2[2] * v2[2];
   }
 
-  function intersectRaySphere(origin, direction, sphere) {
-    const oc = subtract(origin, sphere.center);
-    const a = dot(direction, direction);
-    const b = 2.0 * dot(oc, direction);
-    const c = dot(oc, oc) - sphere.radius * sphere.radius;
-    const discriminant = b * b - 4 * a * c;
-    if (discriminant < 0) {
-      return -1.0; // No hit
-    } else {
-      return (-b - Math.sqrt(discriminant)) / (2.0 * a); // Closest hit
-    }
+  function cross(v1, v2) {
+    return [
+      v1[1] * v2[2] - v1[2] * v2[1],
+      v1[2] * v2[0] - v1[0] * v2[2],
+      v1[0] * v2[1] - v1[1] * v2[0]
+    ];
   }
-
-  rayTrace();
 </script>
 
 ---
