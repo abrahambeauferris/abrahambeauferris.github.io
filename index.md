@@ -19,40 +19,42 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
   <canvas id="raytracer" width="400" height="300" style="border:1px solid #000000;"></canvas>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/OBJLoader.js"></script>
-
 <script>
   const canvas = document.getElementById("raytracer");
   const ctx = canvas.getContext("2d");
   const width = canvas.width;
   const height = canvas.height;
 
-  // Load Teapot model using OBJLoader
-  const loader = new THREE.OBJLoader();
-  let teapotGeometry = null;
+  let vertices = [];
+  let faces = [];
 
-  loader.load('assets/teapot.obj', function (object) {
-    object.traverse(function (child) {
-      if (child instanceof THREE.Mesh) {
-        teapotGeometry = child.geometry;
-        rayTrace();
+  // Parse the OBJ file manually
+  fetch('assets/teapot.obj')
+    .then(response => response.text())
+    .then(text => {
+      const lines = text.split('\n');
+      
+      for (let line of lines) {
+        line = line.trim();
+        if (line.startsWith('v ')) {
+          const [, x, y, z] = line.split(/\s+/).map(parseFloat);
+          vertices.push([x, y, z]);
+        } else if (line.startsWith('f ')) {
+          const [, v1, v2, v3] = line.split(/\s+/).map(v => parseInt(v) - 1);
+          faces.push([v1, v2, v3]);
+        }
       }
+
+      rayTrace();
     });
-  });
 
   function rayTrace() {
-    if (!teapotGeometry) return;
-
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
 
-    const vertices = teapotGeometry.attributes.position.array;
-    const faces = teapotGeometry.index.array;
-
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const color = computeRayColor(x, y, vertices, faces);
+        const color = computeRayColor(x, y);
         const index = (x + y * width) * 4;
         data[index + 0] = color[0]; // R
         data[index + 1] = color[1]; // G
@@ -60,35 +62,37 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
         data[index + 3] = 255;      // A
       }
     }
+
     ctx.putImageData(imageData, 0, 0);
   }
 
-  // Ray-Teapot intersection function
-  function computeRayColor(x, y, vertices, faces) {
-    const rayOrigin = [x, y, 0];
-    const rayDirection = [0, 0, 1];
+  function computeRayColor(x, y) {
+    const rayOrigin = [0, 0, -5]; // Camera position
+    const rayDirection = [
+      (x / width) * 2 - 1, // Map pixel to NDC space [-1, 1]
+      (y / height) * 2 - 1,
+      1 // Looking along positive z-axis
+    ];
 
-    // Loop through each face (triangle) in the teapot geometry
     let closestHit = null;
-    for (let i = 0; i < faces.length; i += 3) {
-      const v0 = [vertices[faces[i] * 3], vertices[faces[i] * 3 + 1], vertices[faces[i] * 3 + 2]];
-      const v1 = [vertices[faces[i + 1] * 3], vertices[faces[i + 1] * 3 + 1], vertices[faces[i + 1] * 3 + 2]];
-      const v2 = [vertices[faces[i + 2] * 3], vertices[faces[i + 2] * 3 + 1], vertices[faces[i + 2] * 3 + 2]];
 
-      const hit = intersectRayTriangle(rayOrigin, rayDirection, v0, v1, v2);
+    // Check ray intersection with each triangle in the teapot
+    for (let i = 0; i < faces.length; i++) {
+      const [v1, v2, v3] = faces[i].map(idx => vertices[idx]);
+      const hit = intersectRayTriangle(rayOrigin, rayDirection, v1, v2, v3);
       if (hit && (!closestHit || hit.t < closestHit.t)) {
         closestHit = hit;
       }
     }
 
     if (closestHit) {
-      return [255, 0, 0]; // Hit the teapot, return red
+      return [255, 0, 0]; // Hit teapot, return red
     } else {
-      return [135, 206, 235]; // Sky blue background
+      return [135, 206, 235]; // Background sky blue
     }
   }
 
-  // Ray-Triangle Intersection Algorithm (Möller–Trumbore)
+  // Ray-Triangle Intersection function (Möller–Trumbore)
   function intersectRayTriangle(origin, direction, v0, v1, v2) {
     const epsilon = 0.000001;
     const edge1 = subtract(v1, v0);
@@ -96,7 +100,7 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
     const h = cross(direction, edge2);
     const a = dot(edge1, h);
 
-    if (a > -epsilon && a < epsilon) return null; // This ray is parallel to the triangle.
+    if (a > -epsilon && a < epsilon) return null; // Parallel ray
 
     const f = 1.0 / a;
     const s = subtract(origin, v0);
@@ -116,13 +120,13 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
     return null;
   }
 
-  // Vector math functions
+  // Vector Math Helper Functions
   function subtract(v1, v2) {
     return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
   }
 
   function dot(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v2[2] * v2[2];
+    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
   }
 
   function cross(v1, v2) {
