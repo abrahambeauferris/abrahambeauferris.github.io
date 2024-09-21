@@ -54,6 +54,12 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
 
   document.getElementById("startButton").addEventListener("click", function() {
     isRendering = true; // Set the rendering flag to true
+    // Remove the button
+    const button = document.getElementById("startButton");
+    button.style.display = "none";
+
+    // Remove gray-out effect
+    canvas.style.backgroundColor = "transparent"; // Change to your desired color
     requestAnimationFrame(renderFrame);
   });
 
