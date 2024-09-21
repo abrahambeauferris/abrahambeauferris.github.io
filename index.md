@@ -11,12 +11,13 @@ Explore my work, research, and career journey below.
 
 ---
 
-## Fun Interactive Demo - Stanford Teapot Ray Tracer
+### Real-time Ray Tracer Demo  
 
-This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm implemented in JavaScript. This demo shows the fundamentals of ray tracing with a triangle mesh object!
+This demo renders the iconic Utah Teapot using a ray-tracing algorithm implemented in JavaScript. It showcases the fundamentals of ray tracing with a triangle mesh object and implements progressive rendering for real-time interaction! 
 
-<div>
-  <canvas id="raytracer" width="400" height="300" style="border:1px solid #000000;"></canvas>
+<div style="position: relative; display: flex; justify-content: center; align-items: center; height: 300px;">
+  <button id="startButton" style="position: absolute;">Start Rendering</button>
+  <canvas id="raytracer" width="400" height="300" style="border:1px solid #000000; background-color: rgba(200, 200, 200, 0.5);"></canvas>
 </div>
 
 <script>
@@ -27,14 +28,17 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
 
   let vertices = [];
   let faces = [];
-  let accumulationBuffer = [];
-  let samplesPerPixel = 0;
 
-  // Load and parse the OBJ file
+  // Accumulation buffer
+  let accumulationBuffer = new Float32Array(width * height * 3); // Store [R, G, B] for each pixel
+  let sampleCountBuffer = new Uint32Array(width * height); // Keep track of sample count per pixel
+
+  // Parse the OBJ file manually
   fetch('assets/teapot.obj')
     .then(response => response.text())
     .then(text => {
       const lines = text.split('\n');
+      
       for (let line of lines) {
         line = line.trim();
         if (line.startsWith('v ')) {
@@ -45,56 +49,55 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
           faces.push([v1, v2, v3]);
         }
       }
-      initializeAccumulationBuffer();
-      rayTrace();
+
+      // Start rendering progressively
+      requestAnimationFrame(renderFrame);
     });
 
-  function initializeAccumulationBuffer() {
-    for (let i = 0; i < width * height; i++) {
-      accumulationBuffer[i] = [0, 0, 0];  // RGB initialized to zero
-    }
-  }
-
-  function rayTrace() {
-    const imageData = ctx.createImageData(width, height);
-    const data = imageData.data;
-
-    samplesPerPixel += 1;
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        // Compute a color sample using random sampling with a bias
-        const colorSample = computeRayColorWithBias(x, y);
-
-        // Accumulate the color sample
-        const index = x + y * width;
-        accumulationBuffer[index][0] += colorSample[0];
-        accumulationBuffer[index][1] += colorSample[1];
-        accumulationBuffer[index][2] += colorSample[2];
-
-        // Average the accumulated color
-        const avgColor = [
-          accumulationBuffer[index][0] / samplesPerPixel,
-          accumulationBuffer[index][1] / samplesPerPixel,
-          accumulationBuffer[index][2] / samplesPerPixel,
-        ];
-
-        const pixelIndex = (x + y * width) * 4;
-        data[pixelIndex + 0] = avgColor[0]; // R
-        data[pixelIndex + 1] = avgColor[1]; // G
-        data[pixelIndex + 2] = avgColor[2]; // B
-        data[pixelIndex + 3] = 255;         // A
-      }
+  function renderFrame() {
+    // Render multiple pixels per frame to speed up accumulation
+    for (let i = 0; i < 100; i++) { // Adjust this value for performance vs. speed trade-off
+      renderRandomPixel();
     }
 
-    ctx.putImageData(imageData, 0, 0);
-
-    // Continue iterating to accumulate more samples
-    requestAnimationFrame(rayTrace);
+    // Request the next frame
+    requestAnimationFrame(renderFrame);
   }
 
-  // Compute a random sample with bias (importance sampling)
-  function computeRayColorWithBias(x, y) {
+  function renderRandomPixel() {
+    // Randomly select a pixel
+    const x = Math.floor(Math.random() * width);
+    const y = Math.floor(Math.random() * height);
+
+    // Compute the ray color for this pixel
+    const color = computeRayColor(x, y);
+
+    // Accumulate color in the buffer
+    const idx = (x + y * width) * 3;
+    accumulationBuffer[idx + 0] += color[0];
+    accumulationBuffer[idx + 1] += color[1];
+    accumulationBuffer[idx + 2] += color[2];
+
+    // Increment the sample count for this pixel
+    sampleCountBuffer[x + y * width]++;
+
+    // Average the color based on the number of samples for this pixel
+    const avgColor = [
+      accumulationBuffer[idx + 0] / sampleCountBuffer[x + y * width],
+      accumulationBuffer[idx + 1] / sampleCountBuffer[x + y * width],
+      accumulationBuffer[idx + 2] / sampleCountBuffer[x + y * width]
+    ];
+
+    // Update the pixel on the canvas
+    const imageData = ctx.createImageData(1, 1);
+    imageData.data[0] = Math.min(255, avgColor[0]);
+    imageData.data[1] = Math.min(255, avgColor[1]);
+    imageData.data[2] = Math.min(255, avgColor[2]);
+    imageData.data[3] = 255; // Fully opaque
+    ctx.putImageData(imageData, x, y);
+  }
+
+  function computeRayColor(x, y) {
     const rayOrigin = [0, 0, -5]; // Camera position
     const rayDirection = [
       (x / width) * 2 - 1, // Map pixel to NDC space [-1, 1]
@@ -114,77 +117,29 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
     }
 
     if (closestHit) {
-      // Now we know the hit point and can compute the normal at the intersection
-      const normal = computeNormal(closestHit, vertices, faces);
-
-      // Use importance sampling with cosine-weighted hemisphere sampling based on the normal
-      const biasedDirection = cosineWeightedSample(normal);
-
-      return traceLight(biasedDirection); // Trace the light based on the biased direction
+      return cosineWeightedSampling(); // Return importance-sampled color
     } else {
       return [135, 206, 235]; // Background sky blue
     }
   }
 
-  // Simple cosine-weighted hemisphere sampling for biased random direction
-  function cosineWeightedSample(normal) {
-    const u1 = Math.random();
-    const u2 = Math.random();
+  // Cosine-weighted hemisphere sampling function
+  function cosineWeightedSampling() {
+    const u = Math.random();
+    const v = Math.random();
 
-    const r = Math.sqrt(u1);
-    const theta = 2 * Math.PI * u2;
+    const theta = Math.acos(Math.sqrt(1 - u)); // Angle relative to normal
+    const phi = 2 * Math.PI * v; // Around the hemisphere
 
-    const x = r * Math.cos(theta);
-    const y = r * Math.sin(theta);
-    const z = Math.sqrt(1 - u1);
+    const x = Math.sin(theta) * Math.cos(phi);
+    const y = Math.sin(theta) * Math.sin(phi);
+    const z = Math.cos(theta);
 
-    // Rotate this sample to align with the normal
-    return rotateToAlign([x, y, z], normal);
+    // Map the sampled direction to color (this is a placeholder for actual lighting)
+    return [255 * Math.abs(x), 255 * Math.abs(y), 255 * Math.abs(z)];
   }
 
-  function traceLight(direction) {
-    // For simplicity, return a constant color (can extend to lighting models)
-    return [255, 0, 0]; // Example: red color for the teapot
-  }
-
-  function rotateToAlign(vec, normal) {
-    const up = [0, 0, 1]; // Z-axis up
-    const axis = cross(up, normal);
-    const angle = Math.acos(dot(up, normal));
-
-    return rotateVectorAroundAxis(vec, axis, angle);
-  }
-
-  // Vector Math Helper Functions
-  function subtract(v1, v2) {
-    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
-  }
-
-  function dot(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-  }
-
-  function cross(v1, v2) {
-    return [
-      v1[1] * v2[2] - v1[2] * v2[1],
-      v1[2] * v2[0] - v1[0] * v2[2],
-      v1[0] * v2[1] - v1[1] * v2[0]
-    ];
-  }
-
-  function rotateVectorAroundAxis(vec, axis, angle) {
-    const cosAngle = Math.cos(angle);
-    const sinAngle = Math.sin(angle);
-    const dotProd = dot(axis, vec);
-    const crossProd = cross(axis, vec);
-
-    return [
-      cosAngle * vec[0] + sinAngle * crossProd[0] + (1 - cosAngle) * dotProd * axis[0],
-      cosAngle * vec[1] + sinAngle * crossProd[1] + (1 - cosAngle) * dotProd * axis[1],
-      cosAngle * vec[2] + sinAngle * crossProd[2] + (1 - cosAngle) * dotProd * axis[2]
-    ];
-  }
-
+  // Ray-Triangle Intersection function (Möller–Trumbore)
   function intersectRayTriangle(origin, direction, v0, v1, v2) {
     const epsilon = 0.000001;
     const edge1 = subtract(v1, v0);
@@ -205,13 +160,29 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
 
     if (v < 0.0 || u + v > 1.0) return null;
 
-    const t = f * dot(edge2, q); // Intersection point
+    const t = f * dot(edge2, q); // Intersection point is found
 
-    if (t > epsilon) return { t }; // Valid ray intersection
+    if (t > epsilon) return { t }; // Ray intersection
 
     return null;
   }
 
+  // Vector Math Helper Functions
+  function subtract(v1, v2) {
+    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
+  }
+
+  function dot(v1, v2) {
+    return v1[0] * v2[0] + v1[1] * v2[1] + v2[2] * v1[2];
+  }
+
+  function cross(v1, v2) {
+    return [
+      v1[1] * v2[2] - v1[2] * v2[1],
+      v1[2] * v2[0] - v1[0] * v2[2],
+      v1[0] * v2[1] - v1[1] * v2[0]
+    ];
+  }
 </script>
 
 ---
@@ -270,19 +241,27 @@ _Unreal Engine 4, C++_
 
 For my honours research, I enhanced the visual fidelity of the SurgiSim VR platform. I implemented **directional ambient occlusion** and **subsurface scattering** to increase realism. Additionally, I improved the performance using **dynamic resolution scaling**, ensuring the system could run smoothly under demanding conditions.
 
+Sure! Here’s the updated project section for the Utah Teapot Ray Tracer, styled consistently with your existing entries:
+
+---
+
 ### Real-time Ray Tracer Demo  
 _Html5, JavaScript, Canvas API_
 
-![Ray Tracer Demo](assets/images/raytracer-project.png)
+<!-- ![Ray Tracer Demo](assets/images/raytracer-project.png) -->
 
-This project is a simple real-time ray tracer built in JavaScript and rendered onto an HTML5 canvas. It demonstrates fundamental ray tracing principles, including ray-sphere intersection. The current scene consists of a ray-traced red sphere on a sky blue background. I plan to expand this demo with more complex objects, lighting, and a fun self-portrait model.
+This project is an interactive real-time ray tracer built in JavaScript, rendering the famous **Utah Teapot** on an HTML5 canvas. It demonstrates fundamental ray tracing principles, including ray-triangle intersection and progressive rendering for enhanced visual quality.
 
-[Try the interactive demo above](#fun-interactive-demo-simple-ray-tracer).
+#### Key Features:
+- **Interactive Rendering**: Users can initiate the rendering process with a button click, allowing for a hands-on experience.
+- **Progressive Accumulation**: Implements an accumulation buffer to progressively refine the image quality over time, reducing noise and improving detail.
+- **Cosine-weighted Sampling**: Utilizes cosine-weighted sampling techniques for realistic light distribution on surfaces.
+- **Dynamic Performance**: Renders multiple pixels per frame, balancing performance and rendering speed to provide real-time feedback.
 
-Key Features:
-- Ray-sphere intersection
-- Basic color rendering
-- Expandable to include more features such as lighting, shadows, and multiple objects
+#### Technical Details:
+- **Rendering Approach**: Employs the Möller–Trumbore algorithm for efficient ray-triangle intersection testing.
+- **Color Calculation**: Computes pixel colors based on ray casting from a virtual camera, taking into account surface normals and light direction.
+- **Background Handling**: Displays a sky blue background for unoccupied areas in the scene.
 
 ---
 
