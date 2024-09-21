@@ -28,6 +28,7 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
 
   let vertices = [];
   let faces = [];
+  let isRendering = false; // Flag to check if rendering is active
 
   // Accumulation buffer
   let accumulationBuffer = new Float32Array(width * height * 3); // Store [R, G, B] for each pixel
@@ -49,12 +50,16 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
           faces.push([v1, v2, v3]);
         }
       }
-
-      // Start rendering progressively
-      requestAnimationFrame(renderFrame);
     });
 
+  document.getElementById("startButton").addEventListener("click", function() {
+    isRendering = true; // Set the rendering flag to true
+    requestAnimationFrame(renderFrame);
+  });
+
   function renderFrame() {
+    if (!isRendering) return; // Stop rendering if flag is false
+
     // Render multiple pixels per frame to speed up accumulation
     for (let i = 0; i < 100; i++) { // Adjust this value for performance vs. speed trade-off
       renderRandomPixel();
