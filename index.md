@@ -27,13 +27,14 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
 
   let vertices = [];
   let faces = [];
+  let accumulationBuffer = [];
+  let samplesPerPixel = 0;
 
-  // Parse the OBJ file manually
+  // Load and parse the OBJ file
   fetch('assets/teapot.obj')
     .then(response => response.text())
     .then(text => {
       const lines = text.split('\n');
-      
       for (let line of lines) {
         line = line.trim();
         if (line.startsWith('v ')) {
@@ -44,29 +45,56 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
           faces.push([v1, v2, v3]);
         }
       }
-
+      initializeAccumulationBuffer();
       rayTrace();
     });
+
+  function initializeAccumulationBuffer() {
+    for (let i = 0; i < width * height; i++) {
+      accumulationBuffer[i] = [0, 0, 0];  // RGB initialized to zero
+    }
+  }
 
   function rayTrace() {
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
 
+    samplesPerPixel += 1;
+
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const color = computeRayColor(x, y);
-        const index = (x + y * width) * 4;
-        data[index + 0] = color[0]; // R
-        data[index + 1] = color[1]; // G
-        data[index + 2] = color[2]; // B
-        data[index + 3] = 255;      // A
+        // Compute a color sample using random sampling with a bias
+        const colorSample = computeRayColorWithBias(x, y);
+
+        // Accumulate the color sample
+        const index = x + y * width;
+        accumulationBuffer[index][0] += colorSample[0];
+        accumulationBuffer[index][1] += colorSample[1];
+        accumulationBuffer[index][2] += colorSample[2];
+
+        // Average the accumulated color
+        const avgColor = [
+          accumulationBuffer[index][0] / samplesPerPixel,
+          accumulationBuffer[index][1] / samplesPerPixel,
+          accumulationBuffer[index][2] / samplesPerPixel,
+        ];
+
+        const pixelIndex = (x + y * width) * 4;
+        data[pixelIndex + 0] = avgColor[0]; // R
+        data[pixelIndex + 1] = avgColor[1]; // G
+        data[pixelIndex + 2] = avgColor[2]; // B
+        data[pixelIndex + 3] = 255;         // A
       }
     }
 
     ctx.putImageData(imageData, 0, 0);
+
+    // Continue iterating to accumulate more samples
+    requestAnimationFrame(rayTrace);
   }
 
-  function computeRayColor(x, y) {
+  // Compute a random sample with bias (importance sampling)
+  function computeRayColorWithBias(x, y) {
     const rayOrigin = [0, 0, -5]; // Camera position
     const rayDirection = [
       (x / width) * 2 - 1, // Map pixel to NDC space [-1, 1]
@@ -86,13 +114,77 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
     }
 
     if (closestHit) {
-      return [255, 0, 0]; // Hit teapot, return red
+      // Now we know the hit point and can compute the normal at the intersection
+      const normal = computeNormal(closestHit, vertices, faces);
+
+      // Use importance sampling with cosine-weighted hemisphere sampling based on the normal
+      const biasedDirection = cosineWeightedSample(normal);
+
+      return traceLight(biasedDirection); // Trace the light based on the biased direction
     } else {
       return [135, 206, 235]; // Background sky blue
     }
   }
 
-  // Ray-Triangle Intersection function (Möller–Trumbore)
+  // Simple cosine-weighted hemisphere sampling for biased random direction
+  function cosineWeightedSample(normal) {
+    const u1 = Math.random();
+    const u2 = Math.random();
+
+    const r = Math.sqrt(u1);
+    const theta = 2 * Math.PI * u2;
+
+    const x = r * Math.cos(theta);
+    const y = r * Math.sin(theta);
+    const z = Math.sqrt(1 - u1);
+
+    // Rotate this sample to align with the normal
+    return rotateToAlign([x, y, z], normal);
+  }
+
+  function traceLight(direction) {
+    // For simplicity, return a constant color (can extend to lighting models)
+    return [255, 0, 0]; // Example: red color for the teapot
+  }
+
+  function rotateToAlign(vec, normal) {
+    const up = [0, 0, 1]; // Z-axis up
+    const axis = cross(up, normal);
+    const angle = Math.acos(dot(up, normal));
+
+    return rotateVectorAroundAxis(vec, axis, angle);
+  }
+
+  // Vector Math Helper Functions
+  function subtract(v1, v2) {
+    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
+  }
+
+  function dot(v1, v2) {
+    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
+  }
+
+  function cross(v1, v2) {
+    return [
+      v1[1] * v2[2] - v1[2] * v2[1],
+      v1[2] * v2[0] - v1[0] * v2[2],
+      v1[0] * v2[1] - v1[1] * v2[0]
+    ];
+  }
+
+  function rotateVectorAroundAxis(vec, axis, angle) {
+    const cosAngle = Math.cos(angle);
+    const sinAngle = Math.sin(angle);
+    const dotProd = dot(axis, vec);
+    const crossProd = cross(axis, vec);
+
+    return [
+      cosAngle * vec[0] + sinAngle * crossProd[0] + (1 - cosAngle) * dotProd * axis[0],
+      cosAngle * vec[1] + sinAngle * crossProd[1] + (1 - cosAngle) * dotProd * axis[1],
+      cosAngle * vec[2] + sinAngle * crossProd[2] + (1 - cosAngle) * dotProd * axis[2]
+    ];
+  }
+
   function intersectRayTriangle(origin, direction, v0, v1, v2) {
     const epsilon = 0.000001;
     const edge1 = subtract(v1, v0);
@@ -113,29 +205,13 @@ This demo renders the famous **Stanford Teapot** using a ray-tracing algorithm i
 
     if (v < 0.0 || u + v > 1.0) return null;
 
-    const t = f * dot(edge2, q); // Intersection point is found
+    const t = f * dot(edge2, q); // Intersection point
 
-    if (t > epsilon) return { t }; // Ray intersection
+    if (t > epsilon) return { t }; // Valid ray intersection
 
     return null;
   }
 
-  // Vector Math Helper Functions
-  function subtract(v1, v2) {
-    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
-  }
-
-  function dot(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-  }
-
-  function cross(v1, v2) {
-    return [
-      v1[1] * v2[2] - v1[2] * v2[1],
-      v1[2] * v2[0] - v1[0] * v2[2],
-      v1[0] * v2[1] - v1[1] * v2[0]
-    ];
-  }
 </script>
 
 ---
