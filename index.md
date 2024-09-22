@@ -67,7 +67,7 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
     if (!isRendering) return; // Stop rendering if flag is false
 
     // Render multiple pixels per frame to speed up accumulation
-    for (let i = 0; i < 100; i++) { // Adjust this value for performance vs. speed trade-off
+    for (let i = 0; i < 1000; i++) { // Adjust this value for performance vs. speed trade-off
       renderRandomPixel();
     }
 
