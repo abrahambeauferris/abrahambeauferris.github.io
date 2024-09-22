@@ -117,6 +117,7 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
     ];
 
     let closestHit = null;
+    let hitNormal = null;
 
     // Check ray intersection with each triangle in the teapot
     for (let i = 0; i < faces.length; i++) {
@@ -124,18 +125,19 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
       const hit = intersectRayTriangle(rayOrigin, rayDirection, v1, v2, v3);
       if (hit && (!closestHit || hit.t < closestHit.t)) {
         closestHit = hit;
+        hitNormal = computeNormal(v1, v2, v3); // Compute the normal for the intersected triangle
       }
     }
 
     if (closestHit) {
-      return cosineWeightedSampling(); // Return importance-sampled color
+      return diffuseBRDF(hitNormal); // Return BRDF result
     } else {
       return [135, 206, 235]; // Background sky blue
     }
   }
 
-  // Cosine-weighted hemisphere sampling function
-  function cosineWeightedSampling() {
+  // Diffuse BRDF function using cosine-weighted hemisphere sampling
+  function diffuseBRDF(normal) {
     const u = Math.random();
     const v = Math.random();
 
@@ -146,8 +148,18 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
     const y = Math.sin(theta) * Math.sin(phi);
     const z = Math.cos(theta);
 
-    // Map the sampled direction to color (this is a placeholder for actual lighting)
-    return [255 * Math.abs(x), 255 * Math.abs(y), 255 * Math.abs(z)];
+    // Rotate the sampled direction to align with the normal
+    const sampledDir = [x, y, z]; // This should be rotated to the coordinate frame defined by the normal
+
+    // Simple Lambertian reflection model (diffuse BRDF)
+    const lambertianReflectance = Math.max(0, dot(sampledDir, normal));
+    const baseColor = [255, 180, 120]; // Basic diffuse color
+
+    return [
+      baseColor[0] * lambertianReflectance,
+      baseColor[1] * lambertianReflectance,
+      baseColor[2] * lambertianReflectance
+    ];
   }
 
   // Ray-Triangle Intersection function (Möller–Trumbore)
@@ -184,7 +196,7 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
   }
 
   function dot(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v2[2] * v1[2];
+    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
   }
 
   function cross(v1, v2) {
@@ -193,6 +205,18 @@ This demo renders the iconic Utah Teapot using a ray-tracing algorithm implement
       v1[2] * v2[0] - v1[0] * v2[2],
       v1[0] * v2[1] - v1[1] * v2[0]
     ];
+  }
+
+  // Compute the surface normal for a triangle
+  function computeNormal(v1, v2, v3) {
+    const edge1 = subtract(v2, v1);
+    const edge2 = subtract(v3, v1);
+    return normalize(cross(edge1, edge2));
+  }
+
+  function normalize(v) {
+    const length = Math.sqrt(dot(v, v));
+    return [v[0] / length, v[1] / length, v[2] / length];
   }
 </script>
 
