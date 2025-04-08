@@ -5,310 +5,48 @@ title: Abraham Beauferris
 
 # Abraham Beauferris
 
-Welcome to my portfolio! I am a computer graphics engineer with a passion for rendering algorithms, real-time photorealism, and GPU optimization. I specialize in creating high-performance graphics systems using DirectX, OpenGL, Vulkan, and C++. Currently, I work at Huawei Canada’s Vancouver Research Center, where I focus on pushing the boundaries of cloud rendering and real-time graphics.
-
-Explore my work, research, and career journey below.
-
----
-
-### Real-time Ray Tracer Demo  
-
-This demo renders the iconic Utah Teapot using a ray-tracing algorithm implemented in JavaScript. It showcases the fundamentals of ray tracing with a triangle mesh object and implements progressive rendering for real-time interaction! 
-
-<div style="position: relative; display: flex; justify-content: center; align-items: center; height: 300px;">
-  <button id="startButton" style="position: absolute;">Start Rendering</button>
-  <canvas id="raytracer" width="400" height="300" style="border:1px solid #000000; background-color: rgba(200, 200, 200, 0.5);"></canvas>
-</div>
-
-<script>
-  const canvas = document.getElementById("raytracer");
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-
-  let vertices = [];
-  let faces = [];
-  let isRendering = false; // Flag to check if rendering is active
-
-  // Accumulation buffer
-  let accumulationBuffer = new Float32Array(width * height * 3); // Store [R, G, B] for each pixel
-  let sampleCountBuffer = new Uint32Array(width * height); // Keep track of sample count per pixel
-
-  // Parse the OBJ file manually
-  fetch('assets/teapot.obj')
-    .then(response => response.text())
-    .then(text => {
-      const lines = text.split('\n');
-      
-      for (let line of lines) {
-        line = line.trim();
-        if (line.startsWith('v ')) {
-          const [, x, y, z] = line.split(/\s+/).map(parseFloat);
-          vertices.push([x, y, z]);
-        } else if (line.startsWith('f ')) {
-          const [, v1, v2, v3] = line.split(/\s+/).map(v => parseInt(v) - 1);
-          faces.push([v1, v2, v3]);
-        }
-      }
-    });
-
-  document.getElementById("startButton").addEventListener("click", function() {
-    isRendering = true; // Set the rendering flag to true
-    // Remove the button
-    const button = document.getElementById("startButton");
-    button.style.display = "none";
-
-    // Remove gray-out effect
-    canvas.style.backgroundColor = "transparent"; // Change to your desired color
-    requestAnimationFrame(renderFrame);
-  });
-
-  function renderFrame() {
-    if (!isRendering) return; // Stop rendering if flag is false
-
-    // Render multiple pixels per frame to speed up accumulation
-    for (let i = 0; i < 1000; i++) { // Adjust this value for performance vs. speed trade-off
-      renderRandomPixel();
-    }
-
-    // Request the next frame
-    requestAnimationFrame(renderFrame);
-  }
-
-  function renderRandomPixel() {
-    // Randomly select a pixel
-    const x = Math.floor(Math.random() * width);
-    const y = Math.floor(Math.random() * height);
-
-    // Compute the ray color for this pixel
-    const color = computeRayColor(x, y);
-
-    // Accumulate color in the buffer
-    const idx = (x + y * width) * 3;
-    accumulationBuffer[idx + 0] += color[0];
-    accumulationBuffer[idx + 1] += color[1];
-    accumulationBuffer[idx + 2] += color[2];
-
-    // Increment the sample count for this pixel
-    sampleCountBuffer[x + y * width]++;
-
-    // Average the color based on the number of samples for this pixel
-    const avgColor = [
-      accumulationBuffer[idx + 0] / sampleCountBuffer[x + y * width],
-      accumulationBuffer[idx + 1] / sampleCountBuffer[x + y * width],
-      accumulationBuffer[idx + 2] / sampleCountBuffer[x + y * width]
-    ];
-
-    // Update the pixel on the canvas
-    const imageData = ctx.createImageData(1, 1);
-    imageData.data[0] = Math.min(255, avgColor[0]);
-    imageData.data[1] = Math.min(255, avgColor[1]);
-    imageData.data[2] = Math.min(255, avgColor[2]);
-    imageData.data[3] = 255; // Fully opaque
-    ctx.putImageData(imageData, x, y);
-  }
-
-  function computeRayColor(x, y) {
-    const rayOrigin = [0, 0, -5]; // Camera position
-    const rayDirection = [
-      (x / width) * 2 - 1, // Map pixel to NDC space [-1, 1]
-      (y / height) * 2 - 1,
-      1 // Looking along positive z-axis
-    ];
-
-    let closestHit = null;
-    let hitNormal = null;
-
-    // Check ray intersection with each triangle in the teapot
-    for (let i = 0; i < faces.length; i++) {
-      const [v1, v2, v3] = faces[i].map(idx => vertices[idx]);
-      const hit = intersectRayTriangle(rayOrigin, rayDirection, v1, v2, v3);
-      if (hit && (!closestHit || hit.t < closestHit.t)) {
-        closestHit = hit;
-        hitNormal = computeNormal(v1, v2, v3); // Compute the normal for the intersected triangle
-      }
-    }
-
-    if (closestHit) {
-      return diffuseBRDF(hitNormal); // Return BRDF result
-    } else {
-      return [135, 206, 235]; // Background sky blue
-    }
-  }
-
-  // Diffuse BRDF function using cosine-weighted hemisphere sampling
-  function diffuseBRDF(normal) {
-    const u = Math.random();
-    const v = Math.random();
-
-    const theta = Math.acos(Math.sqrt(1 - u)); // Angle relative to normal
-    const phi = 2 * Math.PI * v; // Around the hemisphere
-
-    const x = Math.sin(theta) * Math.cos(phi);
-    const y = Math.sin(theta) * Math.sin(phi);
-    const z = Math.cos(theta);
-
-    // Rotate the sampled direction to align with the normal
-    const sampledDir = [x, y, z]; // This should be rotated to the coordinate frame defined by the normal
-
-    // Simple Lambertian reflection model (diffuse BRDF)
-    const lambertianReflectance = Math.max(0, dot(sampledDir, normal));
-    const baseColor = [255, 180, 120]; // Basic diffuse color
-
-    return [
-      baseColor[0] * lambertianReflectance,
-      baseColor[1] * lambertianReflectance,
-      baseColor[2] * lambertianReflectance
-    ];
-  }
-
-  // Ray-Triangle Intersection function (Möller–Trumbore)
-  function intersectRayTriangle(origin, direction, v0, v1, v2) {
-    const epsilon = 0.000001;
-    const edge1 = subtract(v1, v0);
-    const edge2 = subtract(v2, v0);
-    const h = cross(direction, edge2);
-    const a = dot(edge1, h);
-
-    if (a > -epsilon && a < epsilon) return null; // Parallel ray
-
-    const f = 1.0 / a;
-    const s = subtract(origin, v0);
-    const u = f * dot(s, h);
-
-    if (u < 0.0 || u > 1.0) return null;
-
-    const q = cross(s, edge1);
-    const v = f * dot(direction, q);
-
-    if (v < 0.0 || u + v > 1.0) return null;
-
-    const t = f * dot(edge2, q); // Intersection point is found
-
-    if (t > epsilon) return { t }; // Ray intersection
-
-    return null;
-  }
-
-  // Vector Math Helper Functions
-  function subtract(v1, v2) {
-    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]];
-  }
-
-  function dot(v1, v2) {
-    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-  }
-
-  function cross(v1, v2) {
-    return [
-      v1[1] * v2[2] - v1[2] * v2[1],
-      v1[2] * v2[0] - v1[0] * v2[2],
-      v1[0] * v2[1] - v1[1] * v2[0]
-    ];
-  }
-
-  // Compute the surface normal for a triangle
-  function computeNormal(v1, v2, v3) {
-    const edge1 = subtract(v2, v1);
-    const edge2 = subtract(v3, v1);
-    return normalize(cross(edge1, edge2));
-  }
-
-  function normalize(v) {
-    const length = Math.sqrt(dot(v, v));
-    return [v[0] / length, v[1] / length, v[2] / length];
-  }
-</script>
-
----
+Welcome to my portfolio. I am a computer graphics engineer driven by a passion for real-time photorealistic rendering and GPU optimization. My work blends advanced graphics algorithms with cutting-edge AI techniques, and I have been fortunate to contribute to transformational projects at Huawei Canada’s Vancouver Research Center. Here, I push the boundaries of cloud rendering by developing innovative solutions that balance visual fidelity with high-performance execution.
 
 ## About Me
 
-I'm Abraham Beauferris, a Computer Science graduate with First-Class Honours from the University of Calgary. My work spans across computer graphics, neural rendering, and GPU optimization. I thrive on challenges that involve physically-based rendering, path tracing, and integrating AI algorithms into game and simulation engines.
-
-When I’m not working on cutting-edge rendering systems, I enjoy contributing to open-source projects, engaging with research communities, and collaborating with other professionals in the field.
-
-### Key Skills
-- **Graphics Algorithms**: Advanced knowledge in rendering algorithms and photorealistic rendering systems.
-- **APIs**: Extensive experience with DirectX, OpenGL, Vulkan for low-level graphics programming.
-- **Rendering Pipelines**: Expertise in path tracing, rasterization, and subsurface scattering.
-- **Optimization**: Skilled in GPU performance optimization for real-time applications.
-- **AI & Neural Rendering**: Incorporating AI-based techniques using PyTorch and Tensorflow for rendering systems.
-- **Programming Languages**: Proficient in C++, Python, and shader programming.
-
----
+I earned First-Class Honours in Computer Science from the University of Calgary, and since then, I have dedicated myself to mastering every facet of graphics programming—from low-level APIs like DirectX, OpenGL, and Vulkan to sophisticated rendering techniques that faithfully capture the nuances of light and material. Whether it’s optimizing real-time pipelines or integrating neural rendering techniques, my approach is rooted in a deep understanding of both theory and practice. I believe in transforming complex concepts into engaging visual experiences that resonate with both technical experts and creative audiences.
 
 ## Experience
 
-### Associate Engineer | Huawei Canada, Vancouver Research Center  
-_August 2022 - Present_
+At Huawei Canada, I joined the Cloud Rendering team with the challenge of elevating our material creation tools and the overall performance of our rendering solutions. I worked in an environment where innovation was not just encouraged but required, as we aimed to integrate advanced ray tracing algorithms and AI-driven techniques into an established engine. Through close collaboration with multidisciplinary teams, I contributed solutions that refined our pipelines, enhanced photorealism, and achieved measurable performance gains—efforts that continue to set new standards in our industry.
 
-![O3DE Logo](assets/images/o3de.png)
-
-At Huawei, I contribute to the Cloud Rendering team where I work on advancing real-time photorealistic imagery. My role includes:
-- Developing material creation tools within Open 3D Engine.
-- Implementing and optimizing physically-based rendering techniques.
-- Working with ray tracing algorithms to enhance game development and rendering efficiency.
-- Exploring AI algorithms to improve performance and realism in graphics.
-
-### Undergraduate Researcher | VISAGG, University of Calgary  
-_September 2021 - May 2022_
-
-![Surgisim Picture](assets/images/surgisim-platform-1.png)
-
-I collaborated on the **SurgiSim** project, a VR platform designed to teach otolaryngology through immersive simulations. I contributed to graphical enhancements and helped improve performance through rendering techniques like directional ambient occlusion.
-
----
+Previously, as an Undergraduate Researcher with the Visualization and Graphics Group at the University of Calgary, I was immersed in a project to improve a VR surgical training system. This role demanded a blend of creativity and technical precision as I explored advanced ambient occlusion, subsurface scattering, and dynamic resolution scaling techniques. The improvements I introduced significantly boosted both the immersive quality and interactive responsiveness of the system, directly enhancing its educational impact.
 
 ## Projects
 
+### Real-Time Ray Tracer Demo  
+_Html5, JavaScript, Canvas API_
+
+![Ray Tracer Demo](assets/images/raytracer-project.png)
+
+In developing the Real-Time Ray Tracer Demo, I set out to reimagine a classic piece of computer graphics—the Utah Teapot—within the modern context of web-based interactivity. I envisioned a project that could not only serve as an educational tool but also demonstrate that high-fidelity, real-time rendering is possible even in the resource-constrained environment of a browser. The project began as a challenge to replicate core ray tracing principles using JavaScript, a language not traditionally associated with heavy computational tasks. To overcome these constraints, I implemented the efficient Möller–Trumbore algorithm for ray–triangle intersection and devised a progressive accumulation strategy. This approach allowed the demo to start with a noisy, approximate image that gradually resolved into a detailed, photorealistic scene as pixel colors were refined over time. The end result is an interactive demonstration that captures the elegance of advanced rendering techniques while highlighting the practical realities of performance optimization in web applications.
+
 ### Deep Albedo: A Spatially Aware Autoencoder Approach to Interactive Human Skin Rendering  
-_C++, Python, OpenCV, UE5_
+_Technologies: C++, Python, OpenCV, UE5_
 
 ![Deep Albedo Project](assets/images/deep-albedo.png)
 
-This research project focused on using **Monte Carlo photon simulations** and **neural autoencoders** to simulate human skin color in real-time. The goal was to create a model that could dynamically change based on biophysical parameters. This project was presented at SIGGRAPH Asia 2023.
+Deep Albedo represents an ambitious fusion of physics-based rendering and neural network methodologies. Confronted with the intricate problem of simulating human skin, I developed an autoencoder framework that leverages Monte Carlo photon simulations to faithfully capture the interplay of light on skin surfaces. This project required a nuanced understanding of both biophysical properties and computational techniques, and it brought together experts from diverse fields—including collaborators from the University of British Columbia and Huawei Technologies Canada. The resulting system was sophisticated enough to be showcased at SIGGRAPH Asia 2023, and it continues to influence emerging methods in interactive human skin rendering by dynamically adjusting simulated skin tones in response to varying lighting and environmental conditions.
 
 ### Enhancing the Graphical Fidelity of the SurgiSim Platform  
-_Unreal Engine 4, C++_
+_Technologies: Unreal Engine 4, C++_
 
 ![Honours Project](assets/images/surgisim-platform-2.png)
 
-For my honours research, I enhanced the visual fidelity of the SurgiSim VR platform. I implemented **directional ambient occlusion** and **subsurface scattering** to increase realism. Additionally, I improved the performance using **dynamic resolution scaling**, ensuring the system could run smoothly under demanding conditions.
-
-Sure! Here’s the updated project section for the Utah Teapot Ray Tracer, styled consistently with your existing entries:
-
----
-
-### Real-time Ray Tracer Demo  
-_Html5, JavaScript, Canvas API_
-
-<!-- ![Ray Tracer Demo](assets/images/raytracer-project.png) -->
-
-This project is an interactive real-time ray tracer built in JavaScript, rendering the famous **Utah Teapot** on an HTML5 canvas. It demonstrates fundamental ray tracing principles, including ray-triangle intersection and progressive rendering for enhanced visual quality.
-
-#### Key Features:
-- **Interactive Rendering**: Users can initiate the rendering process with a button click, allowing for a hands-on experience.
-- **Progressive Accumulation**: Implements an accumulation buffer to progressively refine the image quality over time, reducing noise and improving detail.
-- **Cosine-weighted Sampling**: Utilizes cosine-weighted sampling techniques for realistic light distribution on surfaces.
-- **Dynamic Performance**: Renders multiple pixels per frame, balancing performance and rendering speed to provide real-time feedback.
-
-#### Technical Details:
-- **Rendering Approach**: Employs the Möller–Trumbore algorithm for efficient ray-triangle intersection testing.
-- **Color Calculation**: Computes pixel colors based on ray casting from a virtual camera, taking into account surface normals and light direction.
-- **Background Handling**: Displays a sky blue background for unoccupied areas in the scene.
-
----
+During my honours research on the SurgiSim VR surgical training platform, the goal was to elevate both its visual realism and interactive performance to meet the rigorous demands of medical training. I was tasked with overcoming the challenges inherent in creating a lifelike virtual environment that responded seamlessly to user interactions. My solution involved integrating advanced techniques—such as directional ambient occlusion to simulate nuanced lighting effects and subsurface scattering to capture the delicate interplay of light beneath surfaces—while also employing dynamic resolution scaling to ensure smooth performance during complex simulations. The transformation of the SurgiSim platform not only resulted in a more immersive training experience but also provided valuable insights into optimizing real-time rendering under demanding conditions.
 
 ## Contact Me
 
-I’m always open to new opportunities and collaborations. Feel free to reach out!
+I welcome the opportunity to connect with fellow innovators, collaborators, and anyone interested in the evolving landscape of graphics and rendering technology. Whether you want to discuss project ideas, share insights, or explore new collaborative ventures, please reach out.
 
-- **Email**: [abeauferris@gmail.com](mailto:abeauferris@gmail.com)  
-- **Phone**: 403.874.8433  
-- **LinkedIn**: [linkedin.com/in/abrahambeauferris](https://linkedin.com/in/abrahambeauferris)  
-- **GitHub**: [github.com/abrahambeauferris](https://github.com/abrahambeauferris)
+- **Email:** [abeauferris@gmail.com](mailto:abeauferris@gmail.com)
+- **Phone:** 403.874.8433  
+- **LinkedIn:** [linkedin.com/in/abrahambeauferris](https://linkedin.com/in/abrahambeauferris)
+- **GitHub:** [github.com/abrahambeauferris](https://github.com/abrahambeauferris)
 
----
-
-Thanks for visiting my portfolio!
+Thank you for visiting my portfolio.
